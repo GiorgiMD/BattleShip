@@ -36,6 +36,12 @@ public class VentanaBarcos extends JFrame {
     private final JProgressBar progreso = new JProgressBar(0, TipoBarco.TOTAL_BARCOS);
     private TarjetaBarco seleccion;
     private char orientacion = 'H';
+    // Nuevas variables para la fase de ataques
+    private final BlockingQueue<Point> ataques = new LinkedBlockingQueue<>();
+    private final List<Point> misAciertos = new ArrayList<>();
+    private final List<Point> misFallos = new ArrayList<>();
+    private final List<Point> ataquesEnemigos = new ArrayList<>();
+    public volatile boolean faseAtaques = false; // Indica si estamos en fase de ataque
 
     public VentanaBarcos() { this("Modo local"); }
 
@@ -225,6 +231,26 @@ public class VentanaBarcos extends JFrame {
     public List<DatosBarco> obtenerBarcosColocados() { return modelo.obtenerPosiciones(); }
 
     public int[][] obtenerMatriz() { return modelo.obtenerMatriz(); }
+    
+    public Point esperarAtaque() {
+        try {
+            return ataques.take();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+    }
+
+    public void registrarMiAtaque(int x, int y, boolean acierto) {
+        if (acierto) misAciertos.add(new Point(x, y));
+        else misFallos.add(new Point(x, y));
+        tablero.repaint();
+    }
+
+    public void registrarAtaqueEnemigo(int x, int y) {
+        ataquesEnemigos.add(new Point(x, y));
+        tablero.repaint();
+    }
 
     public static VentanaBarcos abrir(String jugador) throws InvocationTargetException, InterruptedException {
         if (SwingUtilities.isEventDispatchThread()) return new VentanaBarcos(jugador);
@@ -356,9 +382,19 @@ public class VentanaBarcos extends JFrame {
                     repaint();
                 }
 
+                // REEMPLAZA EL mouseClicked DENTRO DE PanelTablero POR ESTE:
                 @Override
                 public void mouseClicked(MouseEvent e) {
-                    if (SwingUtilities.isLeftMouseButton(e)) colocarBarco(celdaEn(e.getPoint()));
+                    if (SwingUtilities.isLeftMouseButton(e)) {
+                        Point celda = celdaEn(e.getPoint());
+                        if (celda != null) {
+                            if (!faseAtaques) {
+                                colocarBarco(celda); // Fase 1: Colocar
+                            } else {
+                                ataques.offer(new Point(celda.x + 1, celda.y + 1)); // Fase 2: Atacar
+                            }
+                        }
+                    }
                 }
             };
             addMouseListener(raton);
@@ -380,6 +416,17 @@ public class VentanaBarcos extends JFrame {
                     return colocarBarco(celdaEn(support.getDropLocation().getDropPoint()));
                 }
             });
+        }
+        // AÑADE ESTE MÉTODO DE DIBUJO DENTRO DE PanelTablero:
+        private void dibujarMarca(Graphics2D g, Rectangle area, int casilla, Point p, boolean cruz) {
+            int cx = area.x + (p.x - 1) * casilla;
+            int cy = area.y + (p.y - 1) * casilla;
+            if (cruz) {
+                g.drawLine(cx + 8, cy + 8, cx + casilla - 8, cy + casilla - 8);
+                g.drawLine(cx + casilla - 8, cy + 8, cx + 8, cy + casilla - 8);
+            } else {
+                g.drawOval(cx + 8, cy + 8, casilla - 16, casilla - 16);
+            }
         }
 
         private TarjetaBarco tarjetaTransferida(TransferHandler.TransferSupport support) {
@@ -452,6 +499,20 @@ public class VentanaBarcos extends JFrame {
             g.drawLine(area.x, area.y, area.x, area.y + borde);
             g.drawLine(area.x + area.width, area.y + area.height, area.x + area.width - borde, area.y + area.height);
             g.drawLine(area.x + area.width, area.y + area.height, area.x + area.width, area.y + area.height - borde);
+            // AÑADE ESTO AL FINAL DEL MÉTODO paintComponent EN PanelTablero (justo ANTES de g.dispose();):
+            g.setStroke(new BasicStroke(3f));
+            for (Point p : misAciertos) {
+                g.setColor(COLOR_ERROR);
+                dibujarMarca(g, area, casilla, p, true);
+            }
+            for (Point p : misFallos) {
+                g.setColor(TEXTO);
+                dibujarMarca(g, area, casilla, p, false);
+            }
+            for (Point p : ataquesEnemigos) {
+                g.setColor(new Color(255, 180, 0)); // Naranja para fuego enemigo
+                dibujarMarca(g, area, casilla, p, true);
+            }
             g.dispose();
         }
 

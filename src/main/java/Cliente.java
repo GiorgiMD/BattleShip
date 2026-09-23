@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
 
 public class Cliente {
     public static void main(String[] args) {
@@ -29,8 +30,67 @@ public class Cliente {
                 System.out.println("Jugador 2: (" + msj + ")");
             }
             System.out.println("Los 7 barcos de cada jugador fueron intercambiados.");
-            ventana.mostrarConexion("FLOTAS INTERCAMBIADAS / Colocación terminada. Fase de ataques pendiente.");
-            // La fase de ataques debe ir AQUÍ, antes de salir del try y cerrar el socket.
+            ventana.faseAtaques = true; // Activa los clics para atacar en la GUI
+            
+            // --- INICIO FASE DE ATAQUES ---
+            int aciertosCliente = 0;
+            int aciertosServidor = 0;
+            boolean turnoCliente = true; 
+            int[][] miMatriz = ventana.obtenerMatriz();
+
+            ventana.mostrarConexion("FASE DE ATAQUES / TU TURNO (Haz clic en la cuadrícula)");
+
+            while (aciertosCliente < TipoBarco.TOTAL_CASILLAS && aciertosServidor < TipoBarco.TOTAL_CASILLAS) {
+                if (turnoCliente) {
+                    java.awt.Point p = ventana.esperarAtaque(); // Espera a que el usuario haga clic
+                    if (p == null) break;
+                    
+                    pw.println(p.x + "," + p.y); 
+                    if (pw.checkError()) throw new IOException("No se pudo enviar ataque.");
+
+                    String msj = brSocket.readLine();
+                    if (msj == null) throw new EOFException("El servidor cerró la conexión.");
+
+                    if (msj.equals("HIT")) {
+                        aciertosCliente++;
+                        ventana.registrarMiAtaque(p.x, p.y, true);
+                        ventana.mostrarConexion("¡IMPACTO! / Vuelve a tirar (Haz clic)");
+                    } else if (msj.equals("WIN")) {
+                        ventana.registrarMiAtaque(p.x, p.y, true);
+                        ventana.mostrarConexion("VICTORIA / Has destruido la flota enemiga.");
+                        break;
+                    } else {
+                        ventana.registrarMiAtaque(p.x, p.y, false);
+                        turnoCliente = false;
+                        ventana.mostrarConexion("FASE DE ATAQUES / AGUA... TURNO ENEMIGO");
+                    }
+                } else {
+                    String msj = brSocket.readLine();
+                    if (msj == null) throw new EOFException("El servidor cerró la conexión.");
+
+                    String[] partes = msj.split(",");
+                    int x = Integer.parseInt(partes[0]);
+                    int y = Integer.parseInt(partes[1]);
+                    
+                    ventana.registrarAtaqueEnemigo(x, y); // Dibuja la X naranja del enemigo
+
+                    if (miMatriz[y - 1][x - 1] == 1) { 
+                        miMatriz[y - 1][x - 1] = 2; 
+                        aciertosServidor++;
+                        if (aciertosServidor == TipoBarco.TOTAL_CASILLAS) {
+                            pw.println("WIN");
+                            ventana.mostrarConexion("DERROTA / Tu flota fue destruida.");
+                            break;
+                        } else {
+                            pw.println("HIT");
+                        }
+                    } else {
+                        pw.println("MISS");
+                        turnoCliente = true;
+                        ventana.mostrarConexion("FASE DE ATAQUES / EL ENEMIGO FALLÓ, TU TURNO (Haz clic)");
+                    }
+                }
+            }
         } catch (Exception e) {
             if (ventana != null) ventana.mostrarConexion("CONEXIÓN INTERRUMPIDA / " + e.getMessage());
             e.printStackTrace();
