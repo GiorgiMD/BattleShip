@@ -1,5 +1,4 @@
 public class DatosBarco {
-    // Coordenadas de inicio: x = columna, y = fila; ambas entre 1 y 10.
     public final int x;
     public final int y;
     public final int tam;

@@ -8,7 +8,6 @@ public class TableroBarcos {
 
     public record BarcoColocado(TipoBarco tipo, DatosBarco datos) {}
 
-    // Retorna null cuando la posición es válida. No modifica el tablero.
     public synchronized String validarColocacion(TipoBarco tipo, int x, int y, char orientacion) {
         if (tipo == null) return "Selecciona un barco de la flota.";
         if (orientacion != 'H' && orientacion != 'V') return "La orientación debe ser H o V.";

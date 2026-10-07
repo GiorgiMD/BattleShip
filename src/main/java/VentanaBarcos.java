@@ -21,6 +21,7 @@ public class VentanaBarcos extends JFrame {
     private static final Color TEXTO = new Color(215, 238, 224);
     private static final Color TENUE = new Color(132, 168, 146);
     private static final Color COLOR_ERROR = new Color(255, 125, 125);
+    private static final Color COLOR_FALLO = new Color(255, 202, 95);
     private final TableroBarcos modelo = new TableroBarcos();
     private final BlockingQueue<DatosBarco> barcosColocados = new LinkedBlockingQueue<>();
     private final List<TarjetaBarco> tarjetas = new ArrayList<>();
@@ -31,6 +32,10 @@ public class VentanaBarcos extends JFrame {
     private final JLabel conexion = etiqueta("MODO LOCAL / COLOCACIÓN", 11, TENUE);
     private final JLabel coordenada = etiqueta("X --  /  Y --", 12, VERDE);
     private final JLabel seleccionActual = etiqueta("SIN BARCO SELECCIONADO", 12, TEXTO);
+    private final JPanel avisosTablero = new JPanel(new CardLayout());
+    private final JPanel avisoAtaque = new JPanel(new BorderLayout(0, 6));
+    private final JLabel tituloAtaque = etiqueta("RESULTADO DEL DISPARO", 24, FONDO);
+    private final JLabel detalleAtaque = etiqueta("Los aciertos y fallos aparecerán aquí.", 13, FONDO);
     private final JToggleButton horizontal = botonOrientacion("Horizontal", true);
     private final JToggleButton vertical = botonOrientacion("Vertical", false);
     private final JProgressBar progreso = new JProgressBar(0, TipoBarco.TOTAL_BARCOS);
@@ -42,6 +47,7 @@ public class VentanaBarcos extends JFrame {
     private final List<Point> misFallos = new ArrayList<>();
     private final List<Point> ataquesEnemigos = new ArrayList<>();
     public volatile boolean faseAtaques = false; // Indica si estamos en fase de ataque
+    private boolean partidaFinalizada;
 
     public VentanaBarcos() { this("Modo local"); }
 
@@ -100,7 +106,15 @@ public class VentanaBarcos extends JFrame {
         JPanel leyenda = transparente(new GridLayout(2, 1, 0, 5));
         leyenda.add(etiqueta("VERDE  posición válida    /    ROJO  posición ocupada o fuera", 11, TENUE));
         leyenda.add(etiqueta("X = columna   Y = fila   ·   Coordenadas de 1 a 10", 11, TENUE));
-        panel.add(leyenda, BorderLayout.SOUTH);
+        avisoAtaque.setBackground(VERDE);
+        avisoAtaque.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        tituloAtaque.setFont(tituloAtaque.getFont().deriveFont(Font.BOLD));
+        avisoAtaque.add(tituloAtaque, BorderLayout.NORTH);
+        avisoAtaque.add(detalleAtaque, BorderLayout.CENTER);
+        avisosTablero.setOpaque(false);
+        avisosTablero.add(leyenda, "colocacion");
+        avisosTablero.add(avisoAtaque, "resultado");
+        panel.add(avisosTablero, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -242,14 +256,96 @@ public class VentanaBarcos extends JFrame {
     }
 
     public void registrarMiAtaque(int x, int y, boolean acierto) {
-        if (acierto) misAciertos.add(new Point(x, y));
-        else misFallos.add(new Point(x, y));
-        tablero.repaint();
+        SwingUtilities.invokeLater(() -> {
+            if (partidaFinalizada) return;
+            if (acierto) misAciertos.add(new Point(x, y));
+            else misFallos.add(new Point(x, y));
+            mostrarAvisoTablero(acierto ? "¡LE ATINASTE!" : "AGUA / FALLASTE",
+                    "X " + x + " / Y " + y + " · " + (acierto ? "Conservas el turno." : "Turno del rival."),
+                    acierto ? VERDE : COLOR_FALLO);
+            tablero.repaint();
+        });
     }
 
     public void registrarAtaqueEnemigo(int x, int y) {
-        ataquesEnemigos.add(new Point(x, y));
-        tablero.repaint();
+        SwingUtilities.invokeLater(() -> {
+            ataquesEnemigos.add(new Point(x, y));
+            tablero.repaint();
+        });
+    }
+
+    private void mostrarAvisoTablero(String titulo, String detalle, Color color) {
+        tituloAtaque.setText(titulo);
+        detalleAtaque.setText(detalle);
+        avisoAtaque.setBackground(color);
+        ((CardLayout) avisosTablero.getLayout()).show(avisosTablero, "resultado");
+    }
+
+    public void mostrarFinPartida(boolean victoria, String ganador) throws InvocationTargetException, InterruptedException {
+        ejecutarAviso(() -> {
+            if (partidaFinalizada) return;
+            partidaFinalizada = true;
+            faseAtaques = false;
+            ataques.clear();
+            String resultado = ganador + " ganó la partida.";
+            mostrarEstado(resultado, !victoria);
+            conexion.setText((victoria ? "VICTORIA" : "DERROTA") + " / " + resultado);
+            mostrarAvisoTablero(victoria ? "¡VICTORIA!" : "DERROTA", "Ganador: " + ganador,
+                    victoria ? VERDE : COLOR_ERROR);
+            if (victoria) {
+                mostrarModal("¡VICTORIA!", "Ganador: " + ganador,
+                        "Destruiste toda la flota enemiga.",
+                        "La partida ha terminado.", "Ver tablero", VERDE);
+            }
+        });
+    }
+
+    // El resultado final se muestra en el hilo de Swing sin congelar la interfaz.
+    private void ejecutarAviso(Runnable aviso) throws InvocationTargetException, InterruptedException {
+        if (SwingUtilities.isEventDispatchThread()) aviso.run();
+        else SwingUtilities.invokeAndWait(aviso);
+    }
+
+    private void mostrarModal(String titulo, String mensaje, String detalle, String indicacion, String accion, Color acento) {
+        JDialog modal = new JDialog(this, titulo, Dialog.ModalityType.DOCUMENT_MODAL);
+        modal.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        modal.setResizable(false);
+
+        JPanel contenido = new JPanel(new BorderLayout(0, 24));
+        contenido.setBackground(PANEL);
+        contenido.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(acento, 2),
+                BorderFactory.createEmptyBorder(28, 32, 28, 32)));
+        JLabel encabezado = etiqueta(titulo, 32, acento);
+        encabezado.setFont(encabezado.getFont().deriveFont(Font.BOLD));
+        encabezado.setHorizontalAlignment(SwingConstants.CENTER);
+        contenido.add(encabezado, BorderLayout.NORTH);
+
+        JPanel mensajes = transparente(new GridLayout(3, 1, 0, 12));
+        for (String texto : new String[]{mensaje, detalle, indicacion}) {
+            JLabel linea = etiqueta(texto, 16, TEXTO);
+            linea.setHorizontalAlignment(SwingConstants.CENTER);
+            mensajes.add(linea);
+        }
+        contenido.add(mensajes, BorderLayout.CENTER);
+
+        JButton aceptar = new JButton(accion);
+        aceptar.setFont(new Font(Font.MONOSPACED, Font.BOLD, 16));
+        aceptar.setBackground(acento);
+        aceptar.setForeground(FONDO);
+        aceptar.setFocusPainted(false);
+        aceptar.setBorder(BorderFactory.createEmptyBorder(12, 28, 12, 28));
+        aceptar.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        aceptar.addActionListener(e -> modal.dispose());
+        contenido.add(aceptar, BorderLayout.SOUTH);
+
+        modal.setContentPane(contenido);
+        modal.getRootPane().setDefaultButton(aceptar);
+        modal.getRootPane().registerKeyboardAction(e -> modal.dispose(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        modal.pack();
+        modal.setLocationRelativeTo(this);
+        modal.setVisible(true);
     }
 
     public static VentanaBarcos abrir(String jugador) throws InvocationTargetException, InterruptedException {
@@ -385,6 +481,7 @@ public class VentanaBarcos extends JFrame {
                 // REEMPLAZA EL mouseClicked DENTRO DE PanelTablero POR ESTE:
                 @Override
                 public void mouseClicked(MouseEvent e) {
+                    if (partidaFinalizada) return;
                     if (SwingUtilities.isLeftMouseButton(e)) {
                         Point celda = celdaEn(e.getPoint());
                         if (celda != null) {

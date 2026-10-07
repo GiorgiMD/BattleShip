@@ -57,7 +57,7 @@ public class Cliente {
                         ventana.mostrarConexion("¡IMPACTO! / Vuelve a tirar (Haz clic)");
                     } else if (msj.equals("WIN")) {
                         ventana.registrarMiAtaque(p.x, p.y, true);
-                        ventana.mostrarConexion("VICTORIA / Has destruido la flota enemiga.");
+                        ventana.mostrarFinPartida(true, "Jugador 1 / Cliente");
                         break;
                     } else {
                         ventana.registrarMiAtaque(p.x, p.y, false);
@@ -79,7 +79,7 @@ public class Cliente {
                         aciertosServidor++;
                         if (aciertosServidor == TipoBarco.TOTAL_CASILLAS) {
                             pw.println("WIN");
-                            ventana.mostrarConexion("DERROTA / Tu flota fue destruida.");
+                            ventana.mostrarFinPartida(false, "Jugador 2 / Servidor");
                             break;
                         } else {
                             pw.println("HIT");

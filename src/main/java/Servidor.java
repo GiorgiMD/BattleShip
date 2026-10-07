@@ -63,14 +63,14 @@ public class Servidor {
                             int x = Integer.parseInt(partes[0]);
                             int y = Integer.parseInt(partes[1]);
                             
-                            ventana.registrarAtaqueEnemigo(x, y); // El servidor ve dónde le ataca el cliente
+                            ventana.registrarAtaqueEnemigo(x, y);
 
                             if (miMatriz[y - 1][x - 1] == 1) { 
                                 miMatriz[y - 1][x - 1] = 2; 
                                 aciertosCliente++;
                                 if (aciertosCliente == TipoBarco.TOTAL_CASILLAS) {
                                     pw.println("WIN");
-                                    ventana.mostrarConexion("DERROTA / El Jugador 1 destruyó tu flota.");
+                                    ventana.mostrarFinPartida(false, "Jugador 1 / Cliente");
                                     break;
                                 } else {
                                     pw.println("HIT");
@@ -79,7 +79,7 @@ public class Servidor {
                                 pw.println("MISS");
                                 turnoCliente = false;
                                 ventana.mostrarConexion("FASE DE ATAQUES / CALCULANDO TIRO AUTOMÁTICO...");
-                                Thread.sleep(700); // Pausa visual breve para no ser inmediato
+                                Thread.sleep(700);
                             }
                         } else {
                             int x, y;
@@ -100,7 +100,7 @@ public class Servidor {
                                 Thread.sleep(700);
                             } else if (msj.equals("WIN")) {
                                 ventana.registrarMiAtaque(x, y, true);
-                                ventana.mostrarConexion("VICTORIA / Has destruido la flota del Jugador 1.");
+                                ventana.mostrarFinPartida(true, "Jugador 2 / Servidor");
                                 break;
                             } else {
                                 ventana.registrarMiAtaque(x, y, false);
